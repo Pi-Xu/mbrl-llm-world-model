@@ -3,6 +3,11 @@ from __future__ import annotations
 import copy
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from einops import rearrange
+import huggingface_hub
+import transformers
+from transformers import MambaModel, MambaConfig
+
 import gymnasium
 import hydra
 import numpy as np
@@ -21,7 +26,6 @@ from torch.distributions import (
 )
 from torch.distributions.utils import probs_to_logits
 
-from sheeprl.algos.dreamer_v2.agent import WorldModel
 from sheeprl.algos.dreamer_v2.utils import compute_stochastic_state
 from sheeprl.algos.dreamer_v3.utils import init_weights, uniform_init_weights
 from sheeprl.models.models import (
@@ -37,6 +41,36 @@ from sheeprl.models.models import (
 from sheeprl.utils.fabric import get_single_device_fabric
 from sheeprl.utils.model import ModuleType, cnn_forward
 from sheeprl.utils.utils import symlog
+
+from algos.mamba_model import get_mamba_model
+
+
+class WorldModel(nn.Module):
+    """
+    Wrapper class for the World model.
+
+    Args:
+        encoder (_FabricModule): the encoder.
+        rssm (RSSM): the rssm.
+        observation_model (_FabricModule): the observation model.
+        reward_model (_FabricModule): the reward model.
+        continue_model (_FabricModule, optional): the continue model.
+    """
+
+    def __init__(
+        self,
+        encoder: _FabricModule,
+        rssm: RSSM,
+        observation_model: _FabricModule,
+        reward_model: _FabricModule,
+        continue_model: Optional[_FabricModule],
+    ) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.rssm = rssm
+        self.observation_model = observation_model
+        self.reward_model = reward_model
+        self.continue_model = continue_model
 
 
 class CNNEncoder(nn.Module):
@@ -304,6 +338,7 @@ class RecurrentModel(nn.Module):
         activation_fn: nn.Module = nn.SiLU,
         layer_norm_cls: Callable[..., nn.Module] = LayerNorm,
         layer_norm_kw: Dict[str, Any] = {"eps": 1e-3},
+        seq_len: int = 16,
     ) -> None:
         super().__init__()
         self.mlp = MLP(
@@ -315,14 +350,10 @@ class RecurrentModel(nn.Module):
             norm_layer=[layer_norm_cls],
             norm_args=[{**layer_norm_kw, "normalized_shape": dense_units}],
         )
-        self.rnn = LayerNormGRUCell(
-            dense_units,
-            recurrent_state_size,
-            bias=False,
-            batch_first=False,
-            layer_norm_cls=layer_norm_cls,
-            layer_norm_kw=layer_norm_kw,
-        )
+        # TODO: rnn cell replaced with mamba
+        self.seq_len = seq_len
+        self.rnn = get_mamba_model()
+        # without seq_len=16
         self.recurrent_state_size = recurrent_state_size
 
     def forward(self, input: Tensor, recurrent_state: Tensor) -> Tensor:
@@ -334,11 +365,20 @@ class RecurrentModel(nn.Module):
             recurrent_state (Tensor): the previous recurrent state.
 
         Returns:
-            the computed recurrent output and recurrent state.
+            the computed recurrent output and recurrent state. (1, B, L+1, H)
         """
+        # mlp: (1, B, z_dim+a_dim) -> (1, B, L*H)) 
         feat = self.mlp(input)
-        out = self.rnn(feat, recurrent_state)
-        return out
+        batch_size = feat.shape[1]
+        feat = feat.view((1, batch_size, self.seq_len-1, -1)) # (1, B, L, H)
+        feat = torch.concat(
+            (torch.zeros((1, batch_size, 1, feat.shape[-1]), device=feat.device),
+            feat), 
+            dim=2)
+        # rnn: (1, B, L+1, H) -> (1, B, L+1, H)
+        out = self.rnn(inputs_embeds = (feat + recurrent_state.view(*feat.shape)).squeeze())
+        # TODO: add CNN (1, B, F)
+        return out['last_hidden_state'].unsqueeze(0)
 
 
 class RSSM(nn.Module):
@@ -390,7 +430,8 @@ class RSSM(nn.Module):
 
     def get_initial_states(self, batch_shape: Sequence[int] | torch.Size) -> Tuple[Tensor, Tensor]:
         initial_recurrent_state = torch.tanh(self.initial_recurrent_state).expand(*batch_shape, -1)
-        initial_posterior = self._transition(initial_recurrent_state, sample_state=False)[1]
+        seq_len = self.recurrent_model.seq_len
+        initial_posterior = self._transition(initial_recurrent_state.view(*batch_shape, seq_len, -1)[:, :, 0,:], sample_state=False)[1]
         return initial_recurrent_state, initial_posterior
 
     def dynamic(
@@ -429,10 +470,16 @@ class RSSM(nn.Module):
         posterior = posterior.view(*posterior.shape[:-2], -1)
         posterior = (1 - is_first) * posterior + is_first * initial_posterior.view_as(posterior)
 
+        # Return: (1, B, L+1, H); slicing into: [:, :, 1:, :](0), [:, :, 0, :](1)
+        # Input shape: 
         recurrent_state = self.recurrent_model(torch.cat((posterior, action), -1), recurrent_state)
-        prior_logits, prior = self._transition(recurrent_state)
-        posterior_logits, posterior = self._representation(recurrent_state, embedded_obs)
-        return recurrent_state, posterior, prior, posterior_logits, prior_logits
+
+        # TODO: in transition_model input shape: (1, B, H)
+        prior_logits, prior = self._transition(recurrent_state[:, :, 0, :])
+
+        # TODO: in representation_model input shape: (B, L * H)
+        posterior_logits, posterior = self._representation(torch.flatten(recurrent_state[:, :, 1:, :], start_dim=2), embedded_obs)
+        return recurrent_state.flatten(start_dim=-2), posterior, prior, posterior_logits, prior_logits
 
     def _uniform_mix(self, logits: Tensor) -> Tensor:
         dim = logits.dim()
@@ -493,8 +540,10 @@ class RSSM(nn.Module):
             The imagined prior state (Tuple[Tensor, Tensor]): the imagined prior state.
             The recurrent state (Tensor).
         """
+        # B 过大
         recurrent_state = self.recurrent_model(torch.cat((prior, actions), -1), recurrent_state)
-        _, imagined_prior = self._transition(recurrent_state)
+        # (1, B, L+1 , H)
+        _, imagined_prior = self._transition(recurrent_state[:, :, 0, :])
         return imagined_prior, recurrent_state
 
 
@@ -972,9 +1021,11 @@ def build_agent(
     critic_cfg = cfg.algo.critic
 
     # Sizes
+    seq_len = world_model_cfg.hf_model.seq_len
     recurrent_state_size = world_model_cfg.recurrent_model.recurrent_state_size
     stochastic_size = world_model_cfg.stochastic_size * world_model_cfg.discrete_size
-    latent_state_size = stochastic_size + recurrent_state_size
+    # TODO:
+    latent_state_size = stochastic_size + recurrent_state_size * seq_len
 
     # Define models
     cnn_stages = int(np.log2(cfg.env.screen_size) - np.log2(4))
@@ -1009,14 +1060,16 @@ def build_agent(
 
     recurrent_model = RecurrentModel(
         input_size=int(sum(actions_dim) + stochastic_size),
-        recurrent_state_size=world_model_cfg.recurrent_model.recurrent_state_size,
-        dense_units=world_model_cfg.recurrent_model.dense_units,
+        recurrent_state_size=recurrent_state_size * seq_len,
+        dense_units=world_model_cfg.recurrent_model.dense_units * (seq_len-1),
         layer_norm_cls=hydra.utils.get_class(world_model_cfg.recurrent_model.layer_norm.cls),
         layer_norm_kw=world_model_cfg.recurrent_model.layer_norm.kw,
+        seq_len=seq_len,
     )
     represention_model_input_size = encoder.output_dim
     if not cfg.algo.world_model.decoupled_rssm:
-        represention_model_input_size += recurrent_state_size
+        # representation model: emb(x_t) + h_t
+        represention_model_input_size += recurrent_state_size * (seq_len-1)
     representation_ln_cls = hydra.utils.get_class(world_model_cfg.representation_model.layer_norm.cls)
     representation_model = MLP(
         input_dims=represention_model_input_size,

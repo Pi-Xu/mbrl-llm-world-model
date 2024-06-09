@@ -18,9 +18,9 @@ from torch.distributions import Distribution, Independent, OneHotCategorical
 from torch.optim import Optimizer
 from torchmetrics import SumMetric
 
-from sheeprl.algos.dreamer_v3.agent import WorldModel, build_agent
-from sheeprl.algos.dreamer_v3.loss import reconstruction_loss
-from sheeprl.algos.dreamer_v3.utils import Moments, compute_lambda_values, prepare_obs, test
+from algos.agent import WorldModel, build_agent
+from algos.loss import reconstruction_loss
+from algos.utils import Moments, compute_lambda_values, prepare_obs, test
 from sheeprl.data.buffers import EnvIndependentReplayBuffer, SequentialReplayBuffer
 from sheeprl.envs.wrappers import RestartOnException
 from sheeprl.utils.distribution import (
@@ -88,6 +88,7 @@ def train(
     batch_size = cfg.algo.per_rank_batch_size
     sequence_length = cfg.algo.per_rank_sequence_length
     recurrent_state_size = cfg.algo.world_model.recurrent_model.recurrent_state_size
+    hf_seq_len = cfg.algo.world_model.hf_model.seq_len
     stochastic_size = cfg.algo.world_model.stochastic_size
     discrete_size = cfg.algo.world_model.discrete_size
     device = fabric.device
@@ -101,8 +102,9 @@ def train(
 
     # Dynamic Learning
     stoch_state_size = stochastic_size * discrete_size
-    recurrent_state = torch.zeros(1, batch_size, recurrent_state_size, device=device)
-    recurrent_states = torch.empty(sequence_length, batch_size, recurrent_state_size, device=device)
+
+    recurrent_state = torch.zeros(1, batch_size, recurrent_state_size * hf_seq_len, device=device)
+    recurrent_states = torch.empty(sequence_length, batch_size, recurrent_state_size * hf_seq_len, device=device)
     priors_logits = torch.empty(sequence_length, batch_size, stoch_state_size, device=device)
 
     # Embed observations from the environment
@@ -197,12 +199,12 @@ def train(
 
     # Behaviour Learning
     imagined_prior = posteriors.detach().reshape(1, -1, stoch_state_size)
-    recurrent_state = recurrent_states.detach().reshape(1, -1, recurrent_state_size)
+    recurrent_state = recurrent_states.detach().reshape(1, -1, recurrent_state_size * hf_seq_len)
     imagined_latent_state = torch.cat((imagined_prior, recurrent_state), -1)
     imagined_trajectories = torch.empty(
         cfg.algo.horizon + 1,
         batch_size * sequence_length,
-        stoch_state_size + recurrent_state_size,
+        stoch_state_size + recurrent_state_size * hf_seq_len,
         device=device,
     )
     imagined_trajectories[0] = imagined_latent_state
