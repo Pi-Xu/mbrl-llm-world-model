@@ -1,0 +1,18 @@
+defaults:
+  - dreamer_v3_XL
+  - _self_
+
+dense_units: 512
+mlp_layers: 2
+world_model:
+  # encoder:
+  #   cnn_channels_multiplier: 32
+  recurrent_model:
+    recurrent_state_size: 768
+    dense_units: 768
+  transition_model:
+    hidden_size: 768
+  representation_model:
+    hidden_size: 768
+  hf_model:
+    seq_len: 16

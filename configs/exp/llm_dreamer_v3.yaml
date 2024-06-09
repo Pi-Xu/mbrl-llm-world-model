@@ -1,8 +1,8 @@
 # @package _global_
 
 defaults:
-  - override /algo: dreamer_v3_S
-  - override /env: atari
+  - override /algo: llm_dreamer_S
+  - override /env: dmc
   - override /model_manager: dreamer_v3
   - _self_
 
@@ -12,9 +12,23 @@ algo:
   total_steps: 5000000
   per_rank_batch_size: 16
   per_rank_sequence_length: 64
-  cnn_keys:
-    encoder: [rgb]
-    decoder: [rgb]
+  # cnn_keys:
+  #   encoder: [state]
+  #   decoder: [state]
+  mlp_keys:
+    encoder: [state]
+    decoder: [state]
+
+env:
+  # Wrapper to be instantiated
+  wrapper:
+    _target_: sheeprl.envs.dmc.DMCWrapper
+    domain_name: walker
+    task_name: walk
+    seed: null
+    from_pixels: False
+    from_vectors: True
+
 
 # Checkpoint
 checkpoint:

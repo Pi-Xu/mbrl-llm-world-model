@@ -3,7 +3,7 @@
 Start with the following command:
 
 ```BASH
-python main.py exp=llm_dreamer
+python main.py exp=llm_dreamer_v3
 ```
 
 - https://github.com/Eclectic-Sheep/sheeprl/blob/main/howto/register_external_algorithm.md
