@@ -1,5 +1,6 @@
 import huggingface_hub
-from transformers import MambaConfig, MambaModel
+from transformers import MambaConfig, MambaModel, AutoModelForCausalLM
+from peft import LoraConfig, TaskType, get_peft_model
 
 # TODO: use Pretrain_model
 Mamba_config = {
@@ -42,9 +43,25 @@ Mamba_config = {
   # "vocab_size": None
 }
 
-def get_mamba_model():
+
+
+# PEFT_config = LoraConfig(task_type=TaskType.SEQ_2_SEQ_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
+
+PERF_config =  LoraConfig(
+    r=8,
+    target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
+    task_type=TaskType.CAUSAL_LM,
+    bias="none"
+)
+
+def get_mamba_model(from_pretrained=False):
     mamba_config = MambaConfig(**Mamba_config)
 
     # Forward 时 使用 input embeds
     hf_model = MambaModel(mamba_config)
+    if from_pretrained:
+        hf_model = hf_model.from_pretrained("state-spaces/mamba-130m-hf")
+    # PEFT
+    hf_model = get_peft_model(hf_model,peft_config=PERF_config)
+    hf_model.print_trainable_parameters()
     return hf_model

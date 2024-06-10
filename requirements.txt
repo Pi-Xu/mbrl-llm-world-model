@@ -20,3 +20,9 @@ rich
 setuptools==68.2.2
 stable_baselines3==2.3.2
 sympy==1.12.1
+transformers
+peft
+einops
+dm_control
+causal-conv1d>=1.2.0
+mamba-ssm
