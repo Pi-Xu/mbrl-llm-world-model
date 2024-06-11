@@ -22,6 +22,9 @@ algo:
     encoder: [state]
     decoder: [state]
 
+fabric:
+  accelerator: cuda
+
 env:
   num_envs: 4
   action_repeat: 2
