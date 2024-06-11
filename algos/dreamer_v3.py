@@ -231,10 +231,11 @@ def train(
 
     # Imagine trajectories in the latent space
     for i in range(1, cfg.algo.horizon + 1):
-        imagined_prior, recurrent_state = world_model.rssm.imagination(imagined_prior, recurrent_state, actions)
-        imagined_prior = imagined_prior.view(1, -1, stoch_state_size)
-        imagined_latent_state = torch.cat((imagined_prior, recurrent_state), -1)
-        imagined_trajectories[i] = imagined_latent_state
+        with torch.no_grad(): # NOTE: save cuda memory
+            imagined_prior, recurrent_state = world_model.rssm.imagination(imagined_prior, recurrent_state, actions)
+            imagined_prior = imagined_prior.view(1, -1, stoch_state_size)
+            imagined_latent_state = torch.cat((imagined_prior, recurrent_state.flatten(start_dim=-2)), -1)
+            imagined_trajectories[i] = imagined_latent_state
         actions = torch.cat(actor(imagined_latent_state.detach())[0], dim=-1)
         imagined_actions[i] = actions
 
