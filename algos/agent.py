@@ -43,7 +43,7 @@ from sheeprl.utils.model import ModuleType, cnn_forward
 from sheeprl.utils.utils import symlog
 
 from algos.mamba_model import get_mamba_model
-
+from algos.gpt_model import get_model
 
 class WorldModel(nn.Module):
     """
@@ -339,6 +339,8 @@ class RecurrentModel(nn.Module):
         layer_norm_cls: Callable[..., nn.Module] = LayerNorm,
         layer_norm_kw: Dict[str, Any] = {"eps": 1e-3},
         seq_len: int = 16,
+        peft: bool = False,
+        from_pretrained: bool = False,
     ) -> None:
         super().__init__()
         self.mlp = MLP(
@@ -352,7 +354,7 @@ class RecurrentModel(nn.Module):
         )
         # TODO: rnn cell replaced with mamba
         self.seq_len = seq_len
-        self.rnn = get_mamba_model()
+        self.rnn = get_model(peft=peft, from_pretrained=from_pretrained)
         # without seq_len=16
         self.recurrent_state_size = recurrent_state_size
 
@@ -1065,6 +1067,8 @@ def build_agent(
         layer_norm_cls=hydra.utils.get_class(world_model_cfg.recurrent_model.layer_norm.cls),
         layer_norm_kw=world_model_cfg.recurrent_model.layer_norm.kw,
         seq_len=seq_len,
+        from_pretrained=cfg.algo.world_model.hf_model.from_pretrained,
+        peft=cfg.algo.world_model.hf_model.peft,
     )
     represention_model_input_size = encoder.output_dim
     if not cfg.algo.world_model.decoupled_rssm:
@@ -1107,8 +1111,14 @@ def build_agent(
         rssm_cls = DecoupledRSSM
     else:
         rssm_cls = RSSM
+    
+    # Edit: apply init weights (llm is not included in init_weights)
+    if cfg.algo.world_model.hf_model.from_pretrained:
+        recurrent_model.mlp = recurrent_model.mlp.apply(init_weights)
+    else:
+        recurrent_model = recurrent_model.apply(init_weights)
     rssm = rssm_cls(
-        recurrent_model=recurrent_model.apply(init_weights),
+        recurrent_model=recurrent_model,
         representation_model=representation_model.apply(init_weights),
         transition_model=transition_model.apply(init_weights),
         distribution_cfg=cfg.distribution,

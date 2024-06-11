@@ -15,4 +15,6 @@ world_model:
   representation_model:
     hidden_size: 768
   hf_model:
-    seq_len: 16
+    seq_len: 4
+    peft: true
+    from_pretrained: false
