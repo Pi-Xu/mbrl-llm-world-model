@@ -6,10 +6,13 @@ defaults:
   - override /model_manager: dreamer_v3
   - _self_
 
+# Experiment
+seed: 5
+
 # Algorithm
 algo:
   replay_ratio: 1
-  total_steps: 5000000
+  total_steps: 500_000
   per_rank_batch_size: 4 # NOTE: edit this to suit cuda memory
   per_rank_sequence_length: 4
   # cnn_keys:
@@ -20,6 +23,9 @@ algo:
     decoder: [state]
 
 env:
+  num_envs: 4
+  action_repeat: 2
+  max_episode_steps: -1
   # Wrapper to be instantiated
   wrapper:
     _target_: sheeprl.envs.dmc.DMCWrapper
@@ -36,14 +42,16 @@ checkpoint:
 
 # Buffer
 buffer:
-  size: 1000000
+  size: 500_000
   checkpoint: True
+  memmap: True
 
 # Distribution
 distribution:
   type: "auto"
 
 metric:
+  log_every: 5000
   aggregator:
     metrics:
       Loss/world_model_loss:
