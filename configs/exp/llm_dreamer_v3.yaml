@@ -10,8 +10,8 @@ defaults:
 algo:
   replay_ratio: 1
   total_steps: 5000000
-  per_rank_batch_size: 16
-  per_rank_sequence_length: 64
+  per_rank_batch_size: 4 # NOTE: edit this to suit cuda memory
+  per_rank_sequence_length: 4
   # cnn_keys:
   #   encoder: [state]
   #   decoder: [state]
@@ -23,9 +23,9 @@ env:
   # Wrapper to be instantiated
   wrapper:
     _target_: sheeprl.envs.dmc.DMCWrapper
-    domain_name: walker
-    task_name: walk
-    seed: null
+    domain_name: cartpole
+    task_name: swingup_sparse
+    seed: 42
     from_pixels: False
     from_vectors: True
 
