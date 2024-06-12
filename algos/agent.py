@@ -378,7 +378,7 @@ class RecurrentModel(nn.Module):
             feat), 
             dim=2)
         # rnn: (1, B, L+1, H) -> (1, B, L+1, H)
-        out = self.rnn(inputs_embeds = (feat + recurrent_state.view(*feat.shape)).squeeze())
+        out = self.rnn(inputs_embeds = (feat + recurrent_state.view(*feat.shape)).squeeze(0))
         # TODO: add CNN (1, B, F)
         return out['last_hidden_state'].unsqueeze(0)
 
@@ -733,11 +733,19 @@ class PlayerDV3(nn.Module):
         if self.decoupled_rssm:
             _, self.stochastic_state = self.rssm._representation(embedded_obs)
         else:
-            _, self.stochastic_state = self.rssm._representation(torch.flatten(self.recurrent_state[:, :, 1:, :], start_dim=2), embedded_obs)
+            if len(self.recurrent_state.shape) == 4:
+                _, self.stochastic_state = self.rssm._representation(torch.flatten(self.recurrent_state[:, :, 1:, :], start_dim=2), embedded_obs)
+
+            # elif len(self.recurrent_state.shape) == 3:
+            #     _, self.stochastic_state = self.rssm._representation(torch.flatten(self.recurrent_state[:, 1:, :], start_dim=1), embedded_obs)
+            else:
+                raise NotImplementedError("The recurrent state shape is not supported")
+                
         self.stochastic_state = self.stochastic_state.view(
             *self.stochastic_state.shape[:-2], self.stochastic_size * self.discrete_size
         )
-        self.recurrent_state = self.recurrent_state.flatten(start_dim=2)
+        # flatten the dimension
+        self.recurrent_state = self.recurrent_state.flatten(start_dim=-2)
         actions, _ = self.actor(torch.cat((self.stochastic_state, self.recurrent_state), -1), greedy, mask)
         self.actions = torch.cat(actions, -1)
         return actions
