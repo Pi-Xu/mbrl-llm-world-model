@@ -109,7 +109,7 @@ def train(
 
     # Embed observations from the environment
     embedded_obs = world_model.encoder(batch_obs)
-
+    world_model.train()
     if cfg.algo.world_model.decoupled_rssm:
         posteriors_logits, posteriors = world_model.rssm._representation(embedded_obs)
         for i in range(0, sequence_length):
@@ -230,6 +230,7 @@ def train(
     # where z0 comes from the posterior, while z'i is the imagined states (prior)
 
     # Imagine trajectories in the latent space
+    world_model.eval()
     for i in range(1, cfg.algo.horizon + 1):
         with torch.no_grad(): # NOTE: save cuda memory
             imagined_prior, recurrent_state = world_model.rssm.imagination(imagined_prior, recurrent_state, actions)
