@@ -450,6 +450,13 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
     )
     actor_optimizer = hydra.utils.instantiate(cfg.algo.actor.optimizer, params=actor.parameters(), _convert_="all")
     critic_optimizer = hydra.utils.instantiate(cfg.algo.critic.optimizer, params=critic.parameters(), _convert_="all")
+    # Scheduler
+    if "scheduler" in cfg.algo.world_model:
+        world_scheduler = hydra.utils.instantiate(
+            cfg.algo.world_model.scheduler, optimizer=world_optimizer, _convert_="all"
+        )
+        print("World scheduler:", world_scheduler)
+    
     if cfg.checkpoint.resume_from:
         world_optimizer.load_state_dict(state["world_optimizer"])
         actor_optimizer.load_state_dict(state["actor_optimizer"])
@@ -695,6 +702,7 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
                             actions_dim,
                             moments,
                         )
+                        world_scheduler.step()
                         cumulative_per_rank_gradient_steps += 1
                     train_step += world_size
 

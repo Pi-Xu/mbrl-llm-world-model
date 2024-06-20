@@ -22,6 +22,20 @@ algo:
     encoder: [state]
     decoder: [state]
 
+  world_model:
+    # World model optimizer
+    optimizer:
+      lr: 1e-3
+      eps: 1e-8
+      weight_decay: 0
+
+    # World model sceduler
+    scheduler:
+      _target_: transformers.get_scheduler
+      name: cosine
+      num_warmup_steps: 1000
+      num_training_steps: 125000
+
 fabric:
   accelerator: cuda
 
