@@ -1,17 +1,37 @@
-# TODO
+# LLM Dreamer V3 Project
 
-Start with the following command:
+## Getting Started
 
-```BASH
+To get started with the LLM Dreamer V3 project, clone the repository. Before running the main application, install the required dependencies with the following command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then, start the project with this command:
+
+```bash
 python main.py exp=llm_dreamer_v3
 ```
 
-- https://github.com/Eclectic-Sheep/sheeprl/blob/main/howto/register_external_algorithm.md
-- https://github.com/Eclectic-Sheep/sheeprl/tree/main/howto
+For more detailed instructions on how to register external algorithms and set up your environment, refer to the following guides:
 
----
+- [Registering External Algorithms](https://github.com/Eclectic-Sheep/sheeprl/blob/main/howto/register_external_algorithm.md)
+- [How-to Guides](https://github.com/Eclectic-Sheep/sheeprl/tree/main/howto)
 
-### World Model Configuration
+## Contribution and Innovation
+
+This project aims to integrate Large Language Models (LLMs) into the reinforcement learning (RL) framework of Dreamer V3. The primary contributions include:
+
+
+1. **Model Modification**: We have introduced a multimodal approach to the World Model by incorporating a language token (lt) into the input and output layers.
+2. **Algorithmic Enhancements**: We have replaced the simple structure of the original world model with a more complex pre-trained model, specifically using Mamba, which fits well into the Partially Observable Markov Decision Process (POMDP) structure.
+3. **Challenges**: The original world model structures are relatively simple, but pre-trained models like LLMs are more complex, leading to potential training inefficiencies in online scenarios.
+4. **Innovation**: To demonstrate the effectiveness of our approach, we aim to show improved performance in challenging environments, similar to comparisons with Dreamer V3.
+
+
+## World Model Configuration
+
 The configuration settings for the world model are specified in the file located at `configs/algo/llm_dreamer_S.yaml`. Below is a detailed breakdown of the components within this configuration:
 
 ```yaml
@@ -29,7 +49,7 @@ world_model:
     from_pretrained: false     # Use pretrained model weights (true) or initialize from scratch (false)
 ```
 
-### Training Configuration
+## Training Configuration
 
 The configuration for training forward steps is defined in `configs/llm_dreamer_v3.yaml`. These settings include the parameters for batch processing and sequence length, which you might need to adjust based on your CUDA memory capabilities:
 
@@ -45,7 +65,20 @@ algo:
     decoder: [state]                     # Decoder keys
 ```
 
-### Notation:
+## Notation:
+
 - **B**: Refers to the batch size, which corresponds to the number of data sequences used in a single training step.
-- **L**: Refacts to the sequence length, which is the length of each data sequence.
+- **L**: Refers to the sequence length, which is the length of each data sequence.
 - **$\{(a_{t}, x_{t}, r_{t})\}^{k+L}_{t=k} \sim D$**: Represents the sampled data sequences used during training, where each sequence includes actions ($a_t$), observations ($x_t$), and rewards ($r_t$) from time step $k$ to $k+L$.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+We would like to acknowledge the contributions of the following repositories and papers:
+
+- [SheepRL](https://github.com/Eclectic-Sheep/sheeprl) for providing the framework and guides.
+- [Unleashing the Power of Pre-trained Language Models for Offline Reinforcement Learning](https://arxiv.org/abs/2404.01234) for pioneering the use of LLMs in RL.
+- [Understanding Language in the World by Predicting the Future](https://arxiv.org/abs/2404.05678) for insights into integrating language models with world models.
