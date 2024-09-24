@@ -71,9 +71,9 @@ algo:
 - **L**: Refers to the sequence length, which is the length of each data sequence.
 - **$\{(a_{t}, x_{t}, r_{t})\}^{k+L}_{t=k} \sim D$**: Represents the sampled data sequences used during training, where each sequence includes actions ($a_t$), observations ($x_t$), and rewards ($r_t$) from time step $k$ to $k+L$.
 
-## License
+<!-- ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. -->
 
 ## Acknowledgments
 
